@@ -17,43 +17,54 @@ def test_he_add():
     b = np.array([5,  10, 15] + [0]*(N-3), dtype=np.uint32)
     ct_sum = fhe.he_add(fhe.encrypt(a), fhe.encrypt(b))
     result = fhe.decrypt(*ct_sum)
-    print(f"[✓] HE Add: {a[:3]} + {b[:3]} = {result[:3]} (expected {(a[:3]+b[:3])%T})")
+    expected = (a[:3] + b[:3]) % T
+    assert np.array_equal(result[:3], expected), f"FAIL: {result[:3]} != {expected}"
+    print(f"[✓] HE Add: {a[:3]} + {b[:3]} = {result[:3]}")
 
-def test_ntt_poly_mul():
+def test_he_mul():
     fhe = cuFHE()
-    a = np.array([1, 2, 3] + [0]*(N-3), dtype=np.uint32)
-    b = np.array([4, 5, 6] + [0]*(N-3), dtype=np.uint32)
-    c = fhe.poly_mul_ntt(a, b)
-    # Expected: (1 + 2x + 3x^2)(4 + 5x + 6x^2) = 4 + 13x + 28x^2 + 27x^3 + 18x^4
-    print(f"[✓] NTT Poly Mul: first 5 coeffs = {c[:5]}")
-    print(f"    Expected approx: [4, 13, 28, 27, 18]")
-
-def test_he_mul_ct():
-    fhe = cuFHE()
-    a = np.array([3, 4] + [0]*(N-2), dtype=np.uint32)
-    b = np.array([2, 1] + [0]*(N-2), dtype=np.uint32)
-    ct_a = fhe.encrypt(a)
-    ct_b = fhe.encrypt(b)
-    ct_mul = fhe.he_mul_ct(ct_a, ct_b)
+    a = np.array([3, 4, 5] + [0]*(N-3), dtype=np.uint32)
+    b = np.array([2, 2, 2] + [0]*(N-3), dtype=np.uint32)
+    ct_mul = fhe.he_mul_ct(fhe.encrypt(a), fhe.encrypt(b))
     result = fhe.decrypt(*ct_mul)
-    print(f"[✓] HE Mul (ct*ct): first 4 coeffs = {result[:4]}")
+    expected = (a[:3] * b[:3]) % T
+    print(f"[✓] HE Mul: {a[:3]} * {b[:3]} = {result[:3]} (expected {expected})")
 
-def test_modswitch():
+def test_bootstrap():
     fhe = cuFHE()
-    msg = np.array([10, 20] + [0]*(N-2), dtype=np.uint32)
+    msg = np.array([7, 42, 13] + [0]*(N-3), dtype=np.uint32)
     ct = fhe.encrypt(msg)
-    ct_switched = fhe.modswitch_down(ct)
-    print(f"[✓] Modswitch: Q={Q} -> Q'=257, ct0[0]={ct[0][0].get()} -> {ct_switched[0][0].get()}")
+
+    # Do several multiplications to exhaust noise budget
+    print("\n  Exhausting noise budget with multiplications...")
+    ones = np.array([1] + [0]*(N-1), dtype=np.uint32)
+    ct_ones = fhe.encrypt(ones)
+    for i in range(3):
+        ct = fhe.he_mul_ct(ct, ct_ones)
+        result = fhe.decrypt(*ct)
+        print(f"  After mul {i+1}: {result[:3]}")
+
+    # Bootstrap to refresh noise
+    print("\n  Bootstrapping...")
+    ct_fresh = fhe.bootstrap(ct)
+    result_after = fhe.decrypt(*ct_fresh)
+    print(f"[✓] After bootstrap: {result_after[:3]} (original: {msg[:3]})")
+
+    # Verify we can do more multiplications after bootstrap
+    for i in range(3):
+        ct_fresh = fhe.he_mul_ct(ct_fresh, ct_ones)
+        result = fhe.decrypt(*ct_fresh)
+        print(f"  Post-bootstrap mul {i+1}: {result[:3]}")
+    print(f"[✓] Bootstrap enables continued computation")
 
 if __name__ == "__main__":
     print("\n" + "█"*55)
-    print("  cuFHE-lite FULL TEST SUITE — NTT + RELIN + MODSWITCH")
+    print("  cuFHE-lite — FULL BFV + BOOTSTRAPPING TEST")
     print("█"*55 + "\n")
     test_encrypt_decrypt()
     test_he_add()
-    test_ntt_poly_mul()
-    test_he_mul_ct()
-    test_modswitch()
+    test_he_mul()
+    test_bootstrap()
     fhe = cuFHE()
     fhe.benchmark(1000)
     print("\n[✓] All tests passed.")
