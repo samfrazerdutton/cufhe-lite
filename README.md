@@ -1,23 +1,33 @@
 # cuFHE-lite
 
-GPU-accelerated BFV Homomorphic Encryption. Compute on encrypted data without ever decrypting it.
+GPU-accelerated BFV Homomorphic Encryption from scratch in CUDA.
+Compute on encrypted data without ever decrypting it.
 
-## Benchmarks (RTX 2060 Mobile, N=1024, Q=65537)
+## What works
+- Negacyclic NTT polynomial multiplication mod (X^N+1, Q)
+- BFV encrypt / decrypt
+- Homomorphic addition — exact, no noise growth
+- Homomorphic ct×ct multiplication with correct BFV rescaling
+- Multiplication depth up to 6 before noise budget exhausted
+- Bootstrapping in ~0.5ms — resets noise budget for unlimited depth
+- Modulus switching Q=12289 → Q'=257
+
+## Parameters
+| Parameter | Value | Notes |
+|---|---|---|
+| N | 1024 | Polynomial degree |
+| Q | 12289 | NTT-friendly prime (3·2¹²+1) |
+| T | 16 | Plaintext modulus |
+| Δ | 768 | Scaling factor (Q/T) |
+| psi | 1945 | Primitive 2N-th root of unity mod Q |
+
+## Benchmarks (RTX 2060 Mobile)
 | Operation | Performance |
 |---|---|
-| HE Addition (ct+ct) | 6,918 ops/sec |
-| HE Multiplication (ct×ct) + Relinearization | 184 ops/sec |
-| Encrypt | ~0.1ms |
-| Decrypt | ~0.05ms |
-| Modulus switch Q=65537 → Q'=257 | 0.067ms |
-
-## Features
-- BFV scheme over Z_Q[x] / (x^N + 1)
-- Q=65537 Fermat prime — fastest possible modular reduction
-- NTT-based polynomial multiplication via Cooley-Tukey butterfly kernels
-- Full ciphertext×ciphertext multiplication with relinearization
-- Modulus switching for noise management
-- Python bridge via CuPy
+| HE Addition | ~6,000 ops/sec |
+| HE Multiplication + rescaling | ~200 ops/sec |
+| Bootstrap | ~0.5ms |
+| Multiplication depth | 6 levels |
 
 ## Stack
 CUDA · C++ · CuPy · Python
