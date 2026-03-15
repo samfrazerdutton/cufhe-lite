@@ -14,6 +14,7 @@ import numpy as np
 import cupy as cp
 from pathlib import Path
 import time
+from src.gpu_utils import get_ptx, get_device_info
 
 Q       = 12289
 Q_PRIME = 257
@@ -55,9 +56,12 @@ def _build_twiddles():
 
 class cuFHE:
     def __init__(self):
-        self._compile()
-        ptx = str(Path(__file__).parent.parent / "kernels" / "fhe_kernel.ptx")
-        mod = cp.RawModule(path=ptx)
+        kernels_dir = Path(__file__).parent.parent / "kernels"
+        ptx = get_ptx(kernels_dir, "fhe_kernel")
+        mod = cp.RawModule(path=str(ptx))
+        info = get_device_info()
+        print(f"[GPU] {info['name']} | {info['sm'].upper()} | "
+              f"{info['vram_gb']:.1f}GB VRAM | {info['sm_count']} SMs")
 
         # Load kernels
         self._enc      = mod.get_function("_Z11bfv_encryptPKjS0_PjS1_i")
@@ -100,15 +104,7 @@ class cuFHE:
         print(f"[cuFHE] Noise budget ~{Q//(2*DELTA)-1} muls | "
               f"psi={PSI}, omega={OMEGA}, inv_N={INV_N}")
 
-    def _compile(self):
-        ptx = Path(__file__).parent.parent / "kernels" / "fhe_kernel.ptx"
-        cu  = Path(__file__).parent.parent / "kernels" / "fhe_kernel.cu"
-        if not ptx.exists():
-            r = subprocess.run(
-                ["nvcc","--ptx","-arch=sm_75","-O3",str(cu),"-o",str(ptx)],
-                capture_output=True, text=True)
-            if r.returncode != 0:
-                raise RuntimeError(r.stderr)
+    # PTX compilation handled by gpu_utils.get_ptx()
 
     def _ntt(self, d_poly):
         """Forward negacyclic NTT in-place."""
